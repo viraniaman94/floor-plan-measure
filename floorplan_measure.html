@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Floor Plan Measure</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --bg:#0f1117; --surface:rgba(18,20,30,0.96); --border:rgba(255,255,255,0.08);
+  --text:#e8e8ed; --text2:#8b8d98; --blue:#4c9aff; --green:#34d399;
+  --red:#f87171; --purple:#a78bfa; --yellow:#fbbf24; --orange:#fb923c;
+  --radius:10px;
+  --font:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+html,body {
+  font-family:var(--font); background:var(--bg); color:var(--text);
+  overflow:hidden; height:100%; width:100%;
+  touch-action:none; -webkit-user-select:none; user-select:none;
+}
+
+/* ===== UPLOAD SCREEN ===== */
+#upload-screen {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  height:100vh; gap:16px; padding:28px; text-align:center;
+  background:radial-gradient(ellipse at 50% 40%,rgba(76,154,255,0.06) 0%,transparent 70%);
+}
+#upload-screen.hidden { display:none; }
+.upload-icon {
+  width:64px; height:64px; border-radius:18px;
+  background:linear-gradient(135deg,var(--blue),var(--purple));
+  display:flex; align-items:center; justify-content:center; font-size:28px;
+  box-shadow:0 8px 32px rgba(76,154,255,0.25);
+}
+#upload-screen h1 { font-size:24px; font-weight:700; letter-spacing:-0.5px; }
+#upload-screen p { color:var(--text2); font-size:14px; max-width:340px; line-height:1.55; }
+#upload-zone {
+  width:100%; max-width:380px;
+  border:1.5px dashed rgba(255,255,255,0.15); border-radius:16px;
+  padding:44px 20px; cursor:pointer;
+  transition:all 0.25s ease; background:rgba(255,255,255,0.02);
+}
+#upload-zone:hover,#upload-zone.dragover {
+  border-color:var(--blue); background:rgba(76,154,255,0.05); transform:scale(1.01);
+}
+#upload-zone span { display:block; font-size:14px; color:var(--blue); font-weight:600; }
+#upload-zone small { display:block; color:var(--text2); font-size:12px; margin-top:6px; }
+#upload-zone input { display:none; }
+
+/* Session list */
+#session-list {
+  width:100%; max-width:380px; margin-top:4px;
+}
+#session-list h3 { font-size:13px; color:var(--text2); margin-bottom:8px; font-weight:600; text-transform:uppercase; letter-spacing:1px; }
+.sess-items { max-height:200px; overflow-y:auto; }
+.sess-item {
+  display:flex; align-items:center; gap:8px;
+  padding:10px 14px; border:1px solid var(--border); border-radius:12px;
+  margin-bottom:6px; cursor:pointer; transition:all 0.15s;
+  background:rgba(255,255,255,0.02);
+}
+.sess-item:hover { background:rgba(76,154,255,0.06); border-color:rgba(76,154,255,0.2); }
+.sess-info { flex:1; text-align:left; min-width:0; }
+.sess-name { font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sess-meta { font-size:11px; color:var(--text2); margin-top:2px; }
+.sess-del {
+  width:28px; height:28px; border-radius:50%; border:none;
+  background:rgba(248,113,113,0.1); color:var(--red);
+  font-size:14px; cursor:pointer; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+}
+.sess-del:hover { background:rgba(248,113,113,0.25); }
+
+/* ===== APP SCREEN ===== */
+#app-screen { display:none; height:100%; position:relative; }
+#app-screen.active { display:block; }
+
+/* ===== TOOLBAR ===== */
+#toolbar {
+  position:fixed; top:0; left:0; right:0; z-index:100;
+  background:var(--surface); backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);
+  padding:6px 8px; display:flex; align-items:center; gap:4px; flex-wrap:wrap;
+}
+.badge {
+  font-family:var(--mono); font-size:9px; font-weight:500;
+  text-transform:uppercase; letter-spacing:1.2px;
+  padding:3px 9px; border-radius:6px; flex-shrink:0;
+}
+.badge-select { background:rgba(76,154,255,0.15); color:var(--blue); }
+.badge-draw { background:rgba(52,211,153,0.15); color:var(--green); }
+
+.tb {
+  padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius);
+  background:transparent; color:var(--text2);
+  font-family:var(--font); font-size:11px; font-weight:500;
+  cursor:pointer; white-space:nowrap; transition:all 0.15s;
+}
+.tb:hover { background:rgba(255,255,255,0.06); color:var(--text); }
+.tb:active { transform:scale(0.97); }
+.tb:disabled { opacity:0.3; pointer-events:none; }
+.tb.on { background:rgba(76,154,255,0.12); border-color:rgba(76,154,255,0.3); color:var(--blue); }
+.tb-sep { width:1px; height:20px; background:var(--border); flex-shrink:0; }
+.tb.accent { background:rgba(52,211,153,0.1); border-color:rgba(52,211,153,0.25); color:var(--green); }
+
+/* ===== CANVAS ===== */
+#canvas-container { position:absolute; top:0; left:0; right:0; bottom:0; }
+
+/* ===== BOTTOM BAR ===== */
+#info-bar {
+  position:fixed; bottom:0; left:0; right:0; z-index:100;
+  background:var(--surface); backdrop-filter:blur(20px);
+  padding:7px 14px; font-size:12px; text-align:center;
+  border-top:1px solid var(--border); color:var(--text2);
+}
+.val { color:var(--yellow); font-family:var(--mono); font-weight:500; font-size:14px; }
+
+/* ===== ZOOM ===== */
+#zoom-ctrls {
+  position:fixed; bottom:46px; right:10px; z-index:100;
+  display:flex; flex-direction:column; gap:3px;
+}
+#zoom-ctrls button {
+  width:34px; height:34px; border-radius:50%;
+  border:1px solid var(--border); background:var(--surface); color:var(--text);
+  font-size:17px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+}
+
+/* ===== OVERLAY / DIALOG ===== */
+.ov {
+  display:none; position:fixed; top:0; left:0; right:0; bottom:0;
+  z-index:300; background:rgba(0,0,0,0.55); backdrop-filter:blur(4px);
+  justify-content:center; align-items:center;
+}
+.ov.show { display:flex; }
+.dlg {
+  background:#1a1c28; border:1px solid rgba(255,255,255,0.1);
+  border-radius:18px; padding:22px; width:92%; max-width:360px;
+  box-shadow:0 24px 64px rgba(0,0,0,0.5);
+}
+.dlg h3 { font-size:15px; font-weight:600; margin-bottom:6px; letter-spacing:-0.3px; }
+.dlg p { font-size:12px; color:var(--text2); margin-bottom:14px; line-height:1.5; }
+.dlg-input {
+  width:100%; padding:10px 12px; border:1px solid var(--border);
+  border-radius:10px; background:rgba(255,255,255,0.04);
+  color:var(--text); font-family:var(--font); font-size:15px;
+  outline:none; margin-bottom:14px;
+}
+.dlg-input:focus { border-color:rgba(76,154,255,0.4); }
+.ft-row { display:flex; gap:6px; align-items:center; margin-bottom:14px; }
+.ft-row input {
+  width:68px; padding:10px; text-align:center;
+  border:1px solid var(--border); border-radius:10px;
+  background:rgba(255,255,255,0.04); color:var(--text);
+  font-family:var(--mono); font-size:15px; outline:none;
+}
+.ft-row input:focus { border-color:rgba(76,154,255,0.4); }
+.ft-row span { font-size:18px; color:var(--text2); }
+.d-btns { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
+.d-btn {
+  padding:9px 20px; border:none; border-radius:10px;
+  font-family:var(--font); font-size:13px; font-weight:600; cursor:pointer;
+}
+.d-btn:active { transform:scale(0.96); }
+.d-btn.cancel { background:rgba(255,255,255,0.06); color:var(--text2); }
+.d-btn.ok { background:var(--blue); color:#fff; }
+.d-btn.ok-green { background:var(--green); color:#000; }
+
+.line-type-btns { display:flex; gap:6px; margin-bottom:14px; }
+.lt-btn {
+  flex:1; padding:10px 8px; border:1.5px solid var(--border); border-radius:10px;
+  background:transparent; color:var(--text2); font-family:var(--font);
+  font-size:12px; font-weight:600; cursor:pointer; text-align:center;
+  transition:all 0.15s;
+}
+.lt-btn.sel { border-color:var(--blue); background:rgba(76,154,255,0.08); color:var(--blue); }
+.dir-btns { display:flex; gap:6px; margin-bottom:14px; }
+.dir-btn {
+  flex:1; padding:8px; border:1.5px solid var(--border); border-radius:10px;
+  background:transparent; color:var(--text2); font-family:var(--font);
+  font-size:12px; font-weight:500; cursor:pointer; text-align:center;
+}
+.dir-btn.sel { border-color:var(--purple); background:rgba(167,139,250,0.08); color:var(--purple); }
+
+/* Save dialog */
+.save-input {
+  width:100%; padding:10px 12px; border:1px solid var(--border);
+  border-radius:10px; background:rgba(255,255,255,0.04);
+  color:var(--text); font-family:var(--font); font-size:15px;
+  outline:none; margin-bottom:14px;
+}
+.save-input:focus { border-color:rgba(76,154,255,0.4); }
+
+/* ===== MAGNIFIER ===== */
+#magnifier {
+  display:none; position:fixed; z-index:250;
+  width:130px; height:130px; border-radius:50%;
+  border:2.5px solid rgba(255,255,255,0.6);
+  box-shadow:0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.3);
+  overflow:hidden; pointer-events:none;
+}
+#mag-canvas { width:130px; height:130px; }
+
+/* ===== TOAST ===== */
+#toast {
+  display:none; position:fixed; bottom:52px; left:50%; transform:translateX(-50%);
+  z-index:400; padding:8px 18px; border-radius:10px;
+  background:rgba(52,211,153,0.15); border:1px solid rgba(52,211,153,0.3);
+  color:var(--green); font-size:12px; font-weight:600;
+  backdrop-filter:blur(10px); white-space:nowrap;
+}
+#toast.show { display:block; animation:toastIn 0.3s ease, toastOut 0.3s ease 1.5s forwards; }
+@keyframes toastIn { from { opacity:0; transform:translateX(-50%) translateY(10px); } }
+@keyframes toastOut { to { opacity:0; transform:translateX(-50%) translateY(-10px); } }
+</style>
+</head>
+<body>
+
+<!-- ======== UPLOAD SCREEN ======== -->
+<div id="upload-screen">
+  <div class="upload-icon">📐</div>
+  <h1>Floor Plan Measure</h1>
+  <p>Upload a floor plan, calibrate with a known dimension, then measure anything.</p>
+  <div id="upload-zone">
+    <span>Tap to select image</span>
+    <small>or drag &amp; drop</small>
+    <input type="file" id="file-input" accept="image/*">
+  </div>
+  <div id="session-list" style="display:none">
+    <h3>Saved Sessions</h3>
+    <div class="sess-items" id="sess-items"></div>
+  </div>
+</div>
+
+<!-- ======== APP SCREEN ======== -->
+<div id="app-screen">
+  <div id="toolbar">
+    <span id="mode-badge" class="badge badge-select">SELECT</span>
+    <button class="tb accent" id="btn-new-line">+ Line</button>
+    <button class="tb" id="btn-cal" disabled>⚖️ Cal</button>
+    <div class="tb-sep"></div>
+    <button class="tb" id="btn-copy" disabled>Copy</button>
+    <button class="tb" id="btn-del" disabled>Del</button>
+    <button class="tb" id="btn-undo" disabled>Undo</button>
+    <div class="tb-sep"></div>
+    <button class="tb" id="btn-save">💾</button>
+    <button class="tb" id="btn-change-img">🖼️</button>
+  </div>
+
+  <div id="canvas-container"><canvas id="c"></canvas></div>
+
+  <div id="zoom-ctrls">
+    <button id="btn-zi">+</button>
+    <button id="btn-zo">−</button>
+  </div>
+
+  <div id="info-bar"><span id="status">Select lines to adjust, or tap + Line</span></div>
+</div>
+
+<!-- ======== NEW LINE DIALOG ======== -->
+<div id="new-line-dlg" class="ov">
+  <div class="dlg">
+    <h3 id="nl-title">New Line</h3>
+    <p id="nl-desc">Choose how to create the line.</p>
+    <div class="line-type-btns">
+      <button class="lt-btn sel" data-type="draw" id="lt-draw">✏️ Draw</button>
+      <button class="lt-btn" data-type="insert" id="lt-insert">📏 Exact Size</button>
+    </div>
+    <div id="nl-insert-opts" style="display:none">
+      <div class="ft-row">
+        <input type="number" id="nl-ft" placeholder="ft" min="0" step="1">
+        <span>'</span>
+        <input type="number" id="nl-in" placeholder="in" min="0" max="11" step="1">
+        <span>"</span>
+      </div>
+      <div class="dir-btns">
+        <button class="dir-btn sel" data-dir="h" id="nl-dir-h">↔ Horizontal</button>
+        <button class="dir-btn" data-dir="v" id="nl-dir-v">↕ Vertical</button>
+      </div>
+    </div>
+    <div class="d-btns">
+      <button class="d-btn cancel" id="nl-cancel">Cancel</button>
+      <button class="d-btn ok-green" id="nl-go">Start Drawing</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======== CALIBRATION DIALOG ======== -->
+<div id="cal-dlg" class="ov">
+  <div class="dlg">
+    <h3>Enter the real-world length</h3>
+    <p>Type the known dimension for the selected line.</p>
+    <div class="ft-row">
+      <input type="number" id="cal-ft" placeholder="ft" min="0" step="1">
+      <span>'</span>
+      <input type="number" id="cal-in" placeholder="in" min="0" max="11" step="1">
+      <span>"</span>
+    </div>
+    <div class="d-btns">
+      <button class="d-btn cancel" id="cal-cancel">Cancel</button>
+      <button class="d-btn ok-green" id="cal-ok">Calibrate</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======== LABEL DIALOG ======== -->
+<div id="label-dlg" class="ov">
+  <div class="dlg">
+    <h3 id="lbl-title">Name this line</h3>
+    <input type="text" class="dlg-input" id="lbl-input" placeholder="e.g., Kitchen wall..." autocomplete="off">
+    <div class="d-btns">
+      <button class="d-btn cancel" id="lbl-skip">Skip</button>
+      <button class="d-btn ok" id="lbl-ok">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======== EDIT LENGTH DIALOG ======== -->
+<div id="edit-dlg" class="ov">
+  <div class="dlg">
+    <h3 id="edit-title">Set line length</h3>
+    <p>Enter a new real-world length. The line resizes from its center.</p>
+    <input type="text" class="dlg-input" id="edit-label" placeholder="Line name (optional)" autocomplete="off">
+    <div class="ft-row">
+      <input type="number" id="edit-ft" placeholder="ft" min="0" step="1">
+      <span>'</span>
+      <input type="number" id="edit-in" placeholder="in" min="0" max="11" step="1">
+      <span>"</span>
+    </div>
+    <div class="d-btns">
+      <button class="d-btn cancel" id="edit-cancel">Cancel</button>
+      <button class="d-btn ok" id="edit-ok">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======== SAVE DIALOG ======== -->
+<div id="save-dlg" class="ov">
+  <div class="dlg">
+    <h3>Save Session</h3>
+    <p>Give this session a name so you can restore it later.</p>
+    <input type="text" class="save-input" id="save-name" placeholder="e.g., My Condo Floor Plan" autocomplete="off">
+    <div class="d-btns">
+      <button class="d-btn cancel" id="save-cancel">Cancel</button>
+      <button class="d-btn ok" id="save-ok">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======== MAGNIFIER ======== -->
+<div id="magnifier">
+  <canvas id="mag-canvas" width="260" height="260"></canvas>
+</div>
+
+<!-- ======== TOAST ======== -->
+<div id="toast"></div>
+
+<script>
+(function(){
+'use strict';
+
+// ================================================================
+// STATE
+// ================================================================
+let mode = 'select';
+let scale = 0;
+let mLines = [];
+let imgDataURL = '';
+let idCtr = 0;
+let calRefId = null;
+let drawing = false;
+let drawStart = null;
+let tempObjs = [];
+let ghostObjs = [];
+let insertFeet = 0, insertDir = 'h';
+let selectedMId = null;
+let isCalibrationFlow = false;
+
+// Multi-touch
+let touches = {};
+let pinching = false;
+let lastPinchDist = 0;
+let lastPanCenter = null;
+
+// Magnifier — tracks the actual fabric endpoint object, not the finger
+let magActive = false;
+let magTrackedObj = null;      // the fabric.Circle being dragged or draw endpoint
+let magTrackedCoords = null;   // {x,y} in canvas coords for draw-mode temp endpoint
+let magFingerScreen = null;    // {x,y} screen coords of finger for positioning the bubble
+
+// Double-tap
+let lastTapTime = 0;
+let lastTapMId = null;
+
+// ================================================================
+// ELEMENTS
+// ================================================================
+const $ = id => document.getElementById(id);
+const uploadScreen = $('upload-screen');
+const appScreen = $('app-screen');
+const fileInput = $('file-input');
+const uploadZone = $('upload-zone');
+const modeBadge = $('mode-badge');
+const statusEl = $('status');
+const btnNewLine = $('btn-new-line');
+const btnCal = $('btn-cal');
+const btnCopy = $('btn-copy');
+const btnDel = $('btn-del');
+const btnUndo = $('btn-undo');
+const btnSave = $('btn-save');
+const btnChangeImg = $('btn-change-img');
+const btnZI = $('btn-zi');
+const btnZO = $('btn-zo');
+const nlDlg = $('new-line-dlg');
+const nlTitle = $('nl-title');
+const nlDesc = $('nl-desc');
+const ltDraw = $('lt-draw');
+const ltInsert = $('lt-insert');
+const nlInsertOpts = $('nl-insert-opts');
+const nlFt = $('nl-ft');
+const nlIn = $('nl-in');
+const nlDirH = $('nl-dir-h');
+const nlDirV = $('nl-dir-v');
+const nlCancel = $('nl-cancel');
+const nlGo = $('nl-go');
+const calDlg = $('cal-dlg');
+const calFt = $('cal-ft');
+const calIn = $('cal-in');
+const calOk = $('cal-ok');
+const calCancel = $('cal-cancel');
+const lblDlg = $('label-dlg');
+const lblTitle = $('lbl-title');
+const lblInput = $('lbl-input');
+const lblOk = $('lbl-ok');
+const lblSkip = $('lbl-skip');
+const editDlg = $('edit-dlg');
+const editTitle = $('edit-title');
+const editFt = $('edit-ft');
+const editIn = $('edit-in');
+const editLabel = $('edit-label');
+const editOk = $('edit-ok');
+const editCancel = $('edit-cancel');
+const saveDlg = $('save-dlg');
+const saveName = $('save-name');
+const saveOkBtn = $('save-ok');
+const saveCancelBtn = $('save-cancel');
+const sessionList = $('session-list');
+const sessItems = $('sess-items');
+const magEl = $('magnifier');
+const magCanvas = $('mag-canvas');
+const magCtx = magCanvas.getContext('2d');
+const toastEl = $('toast');
+
+let fc = null;
+let bgImage = null;
+
+// ================================================================
+// HELPERS
+// ================================================================
+const distFn = (a,b,c,d) => Math.sqrt((c-a)**2+(d-b)**2);
+const feetStr = f => { const ti=Math.round(f*12); return Math.floor(ti/12)+"'"+(ti%12)+'"'; };
+const mStr = f => (f*0.3048).toFixed(2)+'m';
+const fmt = f => feetStr(f)+' ('+mStr(f)+')';
+const hint = t => { statusEl.innerHTML='<span style="color:var(--text2)">'+t+'</span>'; };
+const valStatus = t => { statusEl.innerHTML='<span class="val">'+t+'</span>'; };
+const parseFtIn = (a,b) => (parseFloat(a.value)||0)+(parseFloat(b.value)||0)/12;
+
+function toast(msg) {
+  toastEl.textContent=msg; toastEl.classList.remove('show');
+  void toastEl.offsetWidth; toastEl.classList.add('show');
+  setTimeout(()=>toastEl.classList.remove('show'),2000);
+}
+
+// Convert fabric canvas coords → screen coords
+function canvasToScreen(cx, cy) {
+  const vpt = fc.viewportTransform;
+  return { x: cx * vpt[0] + vpt[4], y: cy * vpt[3] + vpt[5] };
+}
+
+// ================================================================
+// FABRIC INIT
+// ================================================================
+function initCanvas() {
+  fc = new fabric.Canvas('c', {
+    selection:false, allowTouchScrolling:false,
+    enableRetinaScaling:true, stopContextMenu:true,
+  });
+  fc.setWidth(window.innerWidth);
+  fc.setHeight(window.innerHeight);
+  window.addEventListener('resize', () => {
+    if(!fc) return;
+    fc.setWidth(window.innerWidth); fc.setHeight(window.innerHeight);
+    fc.renderAll();
+  });
+}
+
+// ================================================================
+// IMAGE LOADING
+// ================================================================
+function loadImage(src, fromRestore) {
+  const go = (dataURL) => {
+    imgDataURL = dataURL;
+    const imgEl = new Image();
+    imgEl.onload = () => {
+      uploadScreen.classList.add('hidden');
+      appScreen.classList.add('active');
+      if (!fc) initCanvas(); else { fc.clear(); }
+      bgImage = new fabric.Image(imgEl, { left:0, top:0, selectable:false, evented:false, hoverCursor:'default' });
+      fc.setBackgroundImage(bgImage, fc.renderAll.bind(fc));
+      const cw=fc.getWidth(), ch=fc.getHeight()-90;
+      const zf=Math.min(cw/imgEl.naturalWidth, ch/imgEl.naturalHeight)*0.92;
+      fc.setZoom(zf);
+      const vpw=cw/zf, vph=fc.getHeight()/zf;
+      fc.absolutePan(new fabric.Point(-((vpw-imgEl.naturalWidth)/2*zf), -(((vph-imgEl.naturalHeight)/2*zf)+25)));
+      setupEvents();
+      setMode('select');
+      updateToolbar();
+      fc.renderAll();
+      if (!fromRestore) { isCalibrationFlow=true; openNewLineDialog(true); }
+    };
+    imgEl.src = dataURL;
+  };
+  if (typeof src==='string' && src.startsWith('data:')) { go(src); return; }
+  const reader = new FileReader();
+  reader.onload = e => go(e.target.result);
+  reader.readAsDataURL(src);
+}
+
+fileInput.addEventListener('change', e => { if(e.target.files[0]) loadImage(e.target.files[0]); });
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('dragover'); if(e.dataTransfer.files[0]) loadImage(e.dataTransfer.files[0]); });
+
+btnChangeImg.addEventListener('click', () => {
+  appScreen.classList.remove('active'); uploadScreen.classList.remove('hidden');
+  if(fc) fc.clear();
+  mLines=[]; scale=0; calRefId=null; selectedMId=null; fileInput.value='';
+  refreshSessionList();
+});
+
+// ================================================================
+// MEASUREMENT LINES
+// ================================================================
+const C_LINE='#4c9aff', C_CAL='#f87171', C_SEL='#fbbf24', C_INSERT='#a78bfa';
+const EP_R = 8;
+
+function createMLine(x1,y1,x2,y2,label,isCal) {
+  const id='ml_'+(++idCtr);
+  const z=fc.getZoom();
+  const color=isCal?C_CAL:C_LINE;
+
+  const line = new fabric.Line([x1,y1,x2,y2], {
+    stroke:color, strokeWidth:2.5/z,
+    selectable:false, evented:true, // evented for double-tap
+    perPixelTargetFind:true,
+    hoverCursor:'pointer',
+    data:{mId:id, part:'line'},
+  });
+
+  const mkEp = (lx,ly,which) => new fabric.Circle({
+    left:lx, top:ly, radius:EP_R/z,
+    fill:color, stroke:'#fff', strokeWidth:2/z,
+    originX:'center', originY:'center',
+    selectable:true, evented:true,
+    hasControls:false, hasBorders:false,
+    hoverCursor:'grab', moveCursor:'grabbing',
+    data:{mId:id, part:which},
+  });
+  const ep1=mkEp(x1,y1,'ep1'), ep2=mkEp(x2,y2,'ep2');
+
+  const mx=(x1+x2)/2, my=(y1+y2)/2;
+  const mid = new fabric.Rect({
+    left:mx, top:my, width:12/z, height:12/z,
+    fill:'rgba(255,255,255,0.75)', stroke:color, strokeWidth:2/z,
+    rx:3/z, ry:3/z, originX:'center', originY:'center',
+    selectable:true, evented:true,
+    hasControls:false, hasBorders:false,
+    hoverCursor:'move', moveCursor:'move',
+    data:{mId:id, part:'mid'},
+  });
+
+  const lStr=buildLabel(label, scale>0?distFn(x1,y1,x2,y2)/scale:null);
+  const labelText = new fabric.Text(lStr, {
+    fontFamily:"'JetBrains Mono',monospace", fontSize:11/z,
+    fill:'#fbbf24', originX:'center', originY:'center',
+    selectable:false, evented:true, // evented for double-tap on label
+    hoverCursor:'pointer',
+    data:{mId:id, part:'labelText'},
+  });
+  const pad=6/z;
+  const labelBg = new fabric.Rect({
+    width:labelText.width+pad*2, height:labelText.height+pad,
+    fill:'rgba(0,0,0,0.82)', rx:4/z, ry:4/z,
+    originX:'center', originY:'center',
+    selectable:false, evented:true,
+    hoverCursor:'pointer',
+    data:{mId:id, part:'labelBg'},
+  });
+  const off=18/z;
+  labelBg.set({left:mx, top:my-off});
+  labelText.set({left:mx, top:my-off});
+
+  fc.add(line, labelBg, labelText, ep1, ep2, mid);
+
+  const pxD=distFn(x1,y1,x2,y2);
+  const m={id, line, ep1, ep2, mid, labelBg, labelText, feet:scale>0?pxD/scale:null, label:label||null, isCal};
+  mLines.push(m);
+  refreshM(m);
+  updateToolbar();
+  fc.renderAll();
+  return m;
+}
+
+function buildLabel(label, feet) {
+  if(feet===null||feet===undefined) return label?label+': —':'—';
+  return label?label+': '+fmt(feet):fmt(feet);
+}
+
+function refreshM(m) {
+  const x1=m.ep1.left,y1=m.ep1.top,x2=m.ep2.left,y2=m.ep2.top;
+  m.line.set({x1,y1,x2,y2});
+  const mx=(x1+x2)/2, my=(y1+y2)/2;
+  m.mid.set({left:mx, top:my});
+  m.feet = scale>0 ? distFn(x1,y1,x2,y2)/scale : null;
+  const z=fc.getZoom();
+  m.labelText.set({text:buildLabel(m.label,m.feet), fontSize:11/z, left:mx, top:my-18/z});
+  const pad=6/z;
+  m.labelBg.set({width:m.labelText.width+pad*2, height:m.labelText.height+pad, rx:4/z, ry:4/z, left:mx, top:my-18/z});
+  m.line.set({strokeWidth:2.5/z});
+  [m.ep1,m.ep2].forEach(ep=>ep.set({radius:EP_R/z, strokeWidth:2/z}));
+  m.mid.set({width:12/z, height:12/z, strokeWidth:2/z, rx:3/z, ry:3/z});
+}
+
+function refreshAll() { mLines.forEach(refreshM); fc.renderAll(); }
+
+function removeMLine(m) {
+  [m.line,m.ep1,m.ep2,m.mid,m.labelBg,m.labelText].forEach(o=>fc.remove(o));
+  mLines=mLines.filter(x=>x.id!==m.id);
+  if(m.id===calRefId){calRefId=null; scale=0; refreshAll();}
+  if(selectedMId===m.id) selectedMId=null;
+  updateToolbar(); fc.renderAll();
+}
+
+function findM(obj) {
+  if(!obj||!obj.data||!obj.data.mId) return null;
+  return mLines.find(m=>m.id===obj.data.mId)||null;
+}
+
+function selectM(m) {
+  mLines.forEach(ml=>{
+    const c=ml.isCal&&ml.id===calRefId?C_CAL:C_LINE;
+    ml.line.set({stroke:c}); [ml.ep1,ml.ep2].forEach(ep=>ep.set({fill:c})); ml.mid.set({stroke:c});
+  });
+  selectedMId=m?m.id:null;
+  if(m){
+    m.line.set({stroke:C_SEL}); [m.ep1,m.ep2].forEach(ep=>ep.set({fill:C_SEL})); m.mid.set({stroke:C_SEL});
+    if(m.feet!==null) valStatus(fmt(m.feet)); else hint('Selected — calibrate or set length');
+  }
+  updateToolbar(); fc.renderAll();
+}
+
+// ================================================================
+// MODE
+// ================================================================
+function setMode(m) {
+  mode=m;
+  modeBadge.className='badge '+(m==='select'?'badge-select':'badge-draw');
+  modeBadge.textContent=m==='select'?'SELECT':m==='draw'?'DRAW':'INSERT';
+  fc.defaultCursor=m==='select'?'default':'crosshair';
+  // In draw/insert modes, endpoints/mid should not be interactive
+  mLines.forEach(ml=>{
+    const ev=m==='select';
+    [ml.ep1,ml.ep2,ml.mid].forEach(o=>o.set({selectable:ev, evented:ev}));
+    // Line and labels always evented for double-tap in select mode
+    [ml.line, ml.labelBg, ml.labelText].forEach(o=>o.set({evented:ev}));
+  });
+  if(m==='select') fc.discardActiveObject();
+  fc.renderAll();
+}
+
+// ================================================================
+// TOOLBAR
+// ================================================================
+function updateToolbar() {
+  btnCal.disabled=mLines.length===0;
+  btnUndo.disabled=mLines.length===0;
+  btnCopy.disabled=!selectedMId;
+  btnDel.disabled=!selectedMId;
+}
+
+// ================================================================
+// EVENTS
+// ================================================================
+function setupEvents() {
+  fc.off();
+
+  fc.on('mouse:down', opt => {
+    if(pinching) return;
+    const ptr=fc.getPointer(opt.e);
+    const target=opt.target;
+
+    // ---- Double-tap detection ----
+    const now=Date.now();
+    const tappedM = target ? findM(target) : null;
+    if(tappedM && now-lastTapTime<400 && lastTapMId===tappedM.id) {
+      lastTapTime=0; lastTapMId=null;
+      openEditDialog(tappedM);
+      return;
+    }
+    lastTapTime=now;
+    lastTapMId=tappedM?tappedM.id:null;
+
+    // ---- Select mode ----
+    if(mode==='select') {
+      if(target && tappedM) {
+        selectM(tappedM);
+        const part=target.data?.part;
+        if(part==='ep1'||part==='ep2') {
+          // Snap endpoint center to pointer immediately to remove grab offset
+          target.set({left:ptr.x, top:ptr.y});
+          refreshM(tappedM); fc.renderAll();
+          // Start magnifier tracking this endpoint
+          magTrackedObj=target;
+          startMagnifier(opt.e);
+        }
+        return;
+      }
+      selectM(null);
+      hint('Tap a line to select, or + Line');
+      return;
+    }
+
+    // ---- Insert mode ----
+    if(mode==='draw-insert') { placeInsertLine(ptr.x,ptr.y); return; }
+
+    // ---- Draw mode ----
+    if(mode==='draw') {
+      drawing=true;
+      drawStart={x:ptr.x, y:ptr.y};
+      const z=fc.getZoom();
+      const col=(scale>0&&!isCalibrationFlow)?C_LINE:C_CAL;
+      const tl=new fabric.Line([ptr.x,ptr.y,ptr.x,ptr.y],{
+        stroke:col, strokeWidth:2.5/z, strokeDashArray:[6/z,4/z],
+        selectable:false, evented:false,
+      });
+      const te1=new fabric.Circle({left:ptr.x,top:ptr.y,radius:5/z,fill:col,stroke:'#fff',strokeWidth:1.5/z,originX:'center',originY:'center',selectable:false,evented:false});
+      const te2=new fabric.Circle({left:ptr.x,top:ptr.y,radius:5/z,fill:col,stroke:'#fff',strokeWidth:1.5/z,originX:'center',originY:'center',selectable:false,evented:false});
+      tempObjs=[tl,te1,te2];
+      fc.add(tl,te1,te2);
+      // Track the moving endpoint (te2) for magnifier
+      magTrackedObj=null;
+      magTrackedCoords={x:ptr.x, y:ptr.y};
+      startMagnifier(opt.e);
+    }
+  });
+
+  fc.on('mouse:move', opt => {
+    if(pinching) return;
+    const ptr=fc.getPointer(opt.e);
+
+    if(mode==='draw-insert') { updateGhost(ptr.x,ptr.y); return; }
+
+    if(mode==='draw'&&drawing&&tempObjs.length===3) {
+      tempObjs[0].set({x2:ptr.x, y2:ptr.y});
+      tempObjs[2].set({left:ptr.x, top:ptr.y});
+      magTrackedCoords={x:ptr.x, y:ptr.y};
+      fc.renderAll();
+      if(scale>0&&!isCalibrationFlow) valStatus(fmt(distFn(drawStart.x,drawStart.y,ptr.x,ptr.y)/scale));
+      updateMagnifier(opt.e);
+    }
+  });
+
+  fc.on('mouse:up', opt => {
+    if(pinching) return;
+    stopMagnifier();
+    if(mode!=='draw'||!drawing) return;
+    drawing=false;
+    const ptr=fc.getPointer(opt.e);
+    tempObjs.forEach(o=>fc.remove(o)); tempObjs=[];
+    const d=distFn(drawStart.x,drawStart.y,ptr.x,ptr.y);
+    if(d<3/fc.getZoom()){fc.renderAll();return;}
+    const isCal=isCalibrationFlow||scale===0;
+    const m=createMLine(drawStart.x,drawStart.y,ptr.x,ptr.y,null,isCal);
+    setMode('select');
+    selectM(m);
+    if(isCal){isCalibrationFlow=false; openCalDialog(m);}
+  });
+
+  // ---- Object moving ----
+  fc.on('object:moving', opt => {
+    const obj=opt.target;
+    const m=findM(obj);
+    if(!m) return;
+    const part=obj.data.part;
+
+    if(part==='mid') {
+      const dx=obj.left-(m.ep1.left+m.ep2.left)/2;
+      const dy=obj.top-(m.ep1.top+m.ep2.top)/2;
+      m.ep1.set({left:m.ep1.left+dx,top:m.ep1.top+dy});
+      m.ep2.set({left:m.ep2.left+dx,top:m.ep2.top+dy});
+    }
+    refreshM(m); fc.renderAll();
+    if(m.feet!==null) valStatus(fmt(m.feet));
+
+    if(part==='ep1'||part==='ep2') {
+      magTrackedObj=obj;
+      updateMagnifier(opt.e);
+    }
+  });
+
+  fc.on('object:modified', () => { stopMagnifier(); });
+
+  // ---- Multi-touch: pinch zoom + two-finger pan ----
+  const upper=fc.upperCanvasEl;
+
+  upper.addEventListener('touchstart', e => {
+    for(const t of e.changedTouches) touches[t.identifier]={x:t.clientX,y:t.clientY};
+    if(Object.keys(touches).length>=2) {
+      pinching=true; drawing=false;
+      tempObjs.forEach(o=>fc.remove(o)); tempObjs=[];
+      fc.discardActiveObject(); stopMagnifier();
+      const pts=Object.values(touches);
+      lastPinchDist=distFn(pts[0].x,pts[0].y,pts[1].x,pts[1].y);
+      lastPanCenter={x:(pts[0].x+pts[1].x)/2,y:(pts[0].y+pts[1].y)/2};
+      e.preventDefault(); e.stopPropagation();
+    }
+  },{passive:false});
+
+  upper.addEventListener('touchmove', e => {
+    for(const t of e.changedTouches) if(touches[t.identifier]) touches[t.identifier]={x:t.clientX,y:t.clientY};
+    if(pinching&&Object.keys(touches).length>=2) {
+      e.preventDefault(); e.stopPropagation();
+      const pts=Object.values(touches);
+      const nd=distFn(pts[0].x,pts[0].y,pts[1].x,pts[1].y);
+      const nc={x:(pts[0].x+pts[1].x)/2,y:(pts[0].y+pts[1].y)/2};
+      if(lastPinchDist>0){let nz=fc.getZoom()*(nd/lastPinchDist); nz=Math.max(0.1,Math.min(10,nz)); fc.zoomToPoint(new fabric.Point(nc.x,nc.y),nz);}
+      if(lastPanCenter) fc.relativePan(new fabric.Point(nc.x-lastPanCenter.x,nc.y-lastPanCenter.y));
+      lastPinchDist=nd; lastPanCenter=nc;
+      refreshAll();
+    }
+  },{passive:false});
+
+  const endTouch=e=>{
+    for(const t of e.changedTouches) delete touches[t.identifier];
+    if(Object.keys(touches).length<2){pinching=false;lastPinchDist=0;lastPanCenter=null;}
+  };
+  upper.addEventListener('touchend',endTouch,{passive:false});
+  upper.addEventListener('touchcancel',endTouch);
+
+  // Mouse wheel zoom
+  document.addEventListener('wheel',e=>{
+    if(!fc) return; e.preventDefault();
+    let nz=fc.getZoom()*(e.deltaY>0?0.92:1.08);
+    nz=Math.max(0.1,Math.min(10,nz));
+    fc.zoomToPoint(new fabric.Point(e.clientX,e.clientY),nz);
+    refreshAll();
+  },{passive:false});
+}
+
+// ================================================================
+// MAGNIFIER — always centered on the endpoint, not the finger
+// ================================================================
+function startMagnifier(e) {
+  magActive=true;
+  magEl.style.display='block';
+  updateMagnifier(e);
+}
+
+function updateMagnifier(e) {
+  if(!magActive||!fc) return;
+
+  // Where is the finger on screen? (for positioning the magnifier bubble)
+  let fingerX, fingerY;
+  if(e&&e.touches&&e.touches.length>0){fingerX=e.touches[0].clientX;fingerY=e.touches[0].clientY;}
+  else if(e&&e.changedTouches&&e.changedTouches.length>0){fingerX=e.changedTouches[0].clientX;fingerY=e.changedTouches[0].clientY;}
+  else if(e){fingerX=e.clientX;fingerY=e.clientY;}
+  else return;
+  magFingerScreen={x:fingerX,y:fingerY};
+
+  // Where is the actual endpoint in screen coords?
+  let epScreenX, epScreenY;
+  if(magTrackedObj) {
+    // Fabric object — get its canvas coords and convert to screen
+    const sc=canvasToScreen(magTrackedObj.left, magTrackedObj.top);
+    epScreenX=sc.x; epScreenY=sc.y;
+  } else if(magTrackedCoords) {
+    // Draw-mode temp endpoint — canvas coords
+    const sc=canvasToScreen(magTrackedCoords.x, magTrackedCoords.y);
+    epScreenX=sc.x; epScreenY=sc.y;
+  } else {
+    epScreenX=fingerX; epScreenY=fingerY;
+  }
+
+  // Position magnifier bubble above the finger
+  const magSize=130;
+  let mx=fingerX-magSize/2;
+  let my=fingerY-150;
+  if(my<50) my=fingerY+50; // flip below if near top
+  if(mx<4) mx=4;
+  if(mx+magSize>window.innerWidth-4) mx=window.innerWidth-magSize-4;
+  magEl.style.left=mx+'px';
+  magEl.style.top=my+'px';
+
+  // Render magnified view centered on the ENDPOINT's screen position
+  const zoomFactor=3;
+  const srcCanvas=fc.lowerCanvasEl;
+  const dpr=fc.getRetinaScaling();
+
+  const srcCenterX=epScreenX*dpr;
+  const srcCenterY=epScreenY*dpr;
+  const srcW=magCanvas.width/zoomFactor;
+  const srcH=magCanvas.height/zoomFactor;
+  const srcX=srcCenterX-srcW/2;
+  const srcY=srcCenterY-srcH/2;
+
+  magCtx.clearRect(0,0,magCanvas.width,magCanvas.height);
+  magCtx.save();
+  magCtx.beginPath();
+  magCtx.arc(magCanvas.width/2,magCanvas.height/2,magCanvas.width/2,0,Math.PI*2);
+  magCtx.clip();
+  try{magCtx.drawImage(srcCanvas,srcX,srcY,srcW,srcH,0,0,magCanvas.width,magCanvas.height);}catch(ex){}
+  magCtx.restore();
+}
+
+function stopMagnifier() {
+  magActive=false; magTrackedObj=null; magTrackedCoords=null; magFingerScreen=null;
+  magEl.style.display='none';
+}
+
+// ================================================================
+// NEW LINE DIALOG
+// ================================================================
+let nlType='draw';
+
+function openNewLineDialog(calibrationMode) {
+  nlTitle.textContent=calibrationMode?'Draw Reference Line':'New Line';
+  nlDesc.textContent=calibrationMode?'Draw a line along a known dimension on the plan for calibration.':'Choose how to create the line.';
+  nlType='draw';
+  ltDraw.classList.add('sel'); ltInsert.classList.remove('sel');
+  nlInsertOpts.style.display='none'; nlGo.textContent='Start Drawing';
+  nlFt.value=''; nlIn.value='';
+  nlDirH.classList.add('sel'); nlDirV.classList.remove('sel');
+  ltInsert.style.display=scale===0?'none':'';
+  nlDlg.classList.add('show');
+}
+
+ltDraw.addEventListener('click',()=>{nlType='draw';ltDraw.classList.add('sel');ltInsert.classList.remove('sel');nlInsertOpts.style.display='none';nlGo.textContent='Start Drawing';});
+ltInsert.addEventListener('click',()=>{nlType='insert';ltInsert.classList.add('sel');ltDraw.classList.remove('sel');nlInsertOpts.style.display='';nlGo.textContent='Place on Plan';});
+nlDirH.addEventListener('click',()=>{nlDirH.classList.add('sel');nlDirV.classList.remove('sel');});
+nlDirV.addEventListener('click',()=>{nlDirV.classList.add('sel');nlDirH.classList.remove('sel');});
+nlCancel.addEventListener('click',()=>{nlDlg.classList.remove('show');isCalibrationFlow=false;setMode('select');});
+nlGo.addEventListener('click',()=>{
+  nlDlg.classList.remove('show');
+  if(nlType==='draw'){setMode('draw');hint('Draw a line on the plan. Pinch with 2 fingers to zoom.');}
+  else{
+    const ft=parseFtIn(nlFt,nlIn);
+    if(ft<=0){toast('Enter a length > 0');nlDlg.classList.add('show');return;}
+    insertFeet=ft; insertDir=nlDirH.classList.contains('sel')?'h':'v';
+    setMode('draw-insert');
+    hint('Tap on the plan to place the '+feetStr(insertFeet)+' line');
+  }
+});
+btnNewLine.addEventListener('click',()=>openNewLineDialog(false));
+
+// ================================================================
+// INSERT LINE (ghost + place)
+// ================================================================
+function updateGhost(x,y) {
+  ghostObjs.forEach(o=>fc.remove(o)); ghostObjs=[];
+  const lenPx=insertFeet*scale; const z=fc.getZoom();
+  let x1,y1,x2,y2;
+  if(insertDir==='h'){x1=x-lenPx/2;y1=y;x2=x+lenPx/2;y2=y;}else{x1=x;y1=y-lenPx/2;x2=x;y2=y+lenPx/2;}
+  const gl=new fabric.Line([x1,y1,x2,y2],{stroke:C_INSERT,strokeWidth:2.5/z,strokeDashArray:[6/z,4/z],selectable:false,evented:false});
+  const ge1=new fabric.Circle({left:x1,top:y1,radius:5/z,fill:C_INSERT,stroke:'#fff',strokeWidth:1.5/z,originX:'center',originY:'center',selectable:false,evented:false});
+  const ge2=new fabric.Circle({left:x2,top:y2,radius:5/z,fill:C_INSERT,stroke:'#fff',strokeWidth:1.5/z,originX:'center',originY:'center',selectable:false,evented:false});
+  ghostObjs=[gl,ge1,ge2]; fc.add(gl,ge1,ge2); fc.renderAll();
+}
+
+function placeInsertLine(x,y) {
+  ghostObjs.forEach(o=>fc.remove(o)); ghostObjs=[];
+  const lenPx=insertFeet*scale;
+  let x1,y1,x2,y2;
+  if(insertDir==='h'){x1=x-lenPx/2;y1=y;x2=x+lenPx/2;y2=y;}else{x1=x;y1=y-lenPx/2;x2=x;y2=y+lenPx/2;}
+  const m=createMLine(x1,y1,x2,y2,null,false);
+  setMode('select'); selectM(m); toast('Line placed');
+}
+
+// ================================================================
+// CALIBRATION
+// ================================================================
+function openCalDialog(m) {
+  if(!m){const sel=selectedMId?mLines.find(x=>x.id===selectedMId):null;m=sel||mLines[mLines.length-1];}
+  if(!m){toast('Draw a line first');return;}
+  selectM(m);
+  m.line.set({stroke:C_CAL}); [m.ep1,m.ep2].forEach(ep=>ep.set({fill:C_CAL})); m.mid.set({stroke:C_CAL});
+  fc.renderAll();
+  calFt.value=''; calIn.value='';
+  calDlg.classList.add('show');
+  setTimeout(()=>calFt.focus(),120);
+  calOk.onclick=()=>{
+    const totalFt=parseFtIn(calFt,calIn);
+    if(totalFt<=0)return;
+    const pxD=distFn(m.ep1.left,m.ep1.top,m.ep2.left,m.ep2.top);
+    scale=pxD/totalFt;
+    if(calRefId){const old=mLines.find(x=>x.id===calRefId);if(old){old.isCal=false;old.line.set({stroke:C_LINE});[old.ep1,old.ep2].forEach(ep=>ep.set({fill:C_LINE}));old.mid.set({stroke:C_LINE});}}
+    calRefId=m.id; m.isCal=true; m.label=m.label||'Reference';
+    calDlg.classList.remove('show');
+    refreshAll(); selectM(m);
+    toast('Calibrated!');
+  };
+  calCancel.onclick=()=>{calDlg.classList.remove('show');selectM(m);};
+}
+btnCal.addEventListener('click',()=>{const m=selectedMId?mLines.find(x=>x.id===selectedMId):mLines[mLines.length-1];openCalDialog(m);});
+
+// ================================================================
+// LABEL DIALOG
+// ================================================================
+let lblTargetM=null;
+function openLabelDialog(m) {
+  lblTargetM=m;
+  lblTitle.textContent='Name this line'+(m.feet!==null?' ('+fmt(m.feet)+')':'');
+  lblInput.value=m.label||'';
+  lblDlg.classList.add('show');
+  setTimeout(()=>lblInput.focus(),120);
+}
+function commitLabel(lbl){
+  if(lblTargetM){lblTargetM.label=lbl||null;refreshM(lblTargetM);fc.renderAll();}
+  lblTargetM=null; lblDlg.classList.remove('show');
+}
+lblOk.addEventListener('click',()=>commitLabel(lblInput.value.trim()));
+lblSkip.addEventListener('click',()=>commitLabel(lblTargetM?.label||null));
+lblInput.addEventListener('keydown',e=>{if(e.key==='Enter')commitLabel(lblInput.value.trim());});
+
+// ================================================================
+// EDIT LENGTH DIALOG (double-tap)
+// ================================================================
+let editTargetM=null;
+function openEditDialog(m) {
+  editTargetM=m;
+  selectM(m);
+  editTitle.textContent=m.label?'Edit: '+m.label:'Edit line';
+  editLabel.value=m.label||'';
+  if(m.feet!==null){const ti=Math.round(m.feet*12);editFt.value=Math.floor(ti/12);editIn.value=ti%12;}
+  else{editFt.value='';editIn.value='';}
+  editDlg.classList.add('show');
+  setTimeout(()=>editFt.focus(),120);
+}
+editOk.addEventListener('click',()=>{
+  if(!editTargetM)return;
+  // Save label regardless
+  const newLabel = editLabel.value.trim();
+  if(newLabel) editTargetM.label=newLabel;
+  else if(newLabel==='') editTargetM.label=null;
+
+  const newFeet=parseFtIn(editFt,editIn);
+
+  // Allow saving just the label with no length change
+  if(newFeet<=0) {
+    editDlg.classList.remove('show');
+    refreshM(editTargetM); fc.renderAll(); selectM(editTargetM);
+    if(newLabel) toast('Label updated');
+    editTargetM=null; return;
+  }
+
+  if(scale===0) {
+    // Use as calibration
+    const pxD=distFn(editTargetM.ep1.left,editTargetM.ep1.top,editTargetM.ep2.left,editTargetM.ep2.top);
+    scale=pxD/newFeet; calRefId=editTargetM.id; editTargetM.isCal=true; editTargetM.label=editLabel.value.trim()||editTargetM.label||'Reference';
+    editDlg.classList.remove('show');
+    refreshAll(); selectM(editTargetM);
+    toast('Calibrated from this line!');
+    editTargetM=null; return;
+  }
+
+  // Resize keeping center fixed
+  const pxD=distFn(editTargetM.ep1.left,editTargetM.ep1.top,editTargetM.ep2.left,editTargetM.ep2.top);
+  const desiredPx=newFeet*scale;
+  if(pxD>0.01) {
+    const ratio=desiredPx/pxD;
+    const cx=(editTargetM.ep1.left+editTargetM.ep2.left)/2;
+    const cy=(editTargetM.ep1.top+editTargetM.ep2.top)/2;
+    editTargetM.ep1.set({left:cx+(editTargetM.ep1.left-cx)*ratio, top:cy+(editTargetM.ep1.top-cy)*ratio});
+    editTargetM.ep2.set({left:cx+(editTargetM.ep2.left-cx)*ratio, top:cy+(editTargetM.ep2.top-cy)*ratio});
+  }
+  editDlg.classList.remove('show');
+  refreshM(editTargetM); fc.renderAll();
+  selectM(editTargetM);
+  toast('Resized to '+feetStr(newFeet));
+  editTargetM=null;
+});
+editCancel.addEventListener('click',()=>{editDlg.classList.remove('show');editTargetM=null;});
+
+// ================================================================
+// COPY LINE
+// ================================================================
+btnCopy.addEventListener('click',()=>{
+  const m=mLines.find(x=>x.id===selectedMId);
+  if(!m)return;
+  const off=20/fc.getZoom();
+  const nm=createMLine(m.ep1.left+off,m.ep1.top+off,m.ep2.left+off,m.ep2.top+off,m.label?m.label+' copy':null,false);
+  selectM(nm); toast('Line copied');
+});
+
+// ================================================================
+// DELETE + UNDO
+// ================================================================
+btnDel.addEventListener('click',()=>{const m=mLines.find(x=>x.id===selectedMId);if(m){removeMLine(m);hint('Deleted');}});
+btnUndo.addEventListener('click',()=>{if(mLines.length===0)return;removeMLine(mLines[mLines.length-1]);hint('Removed last line');});
+
+// ================================================================
+// SAVE / RESTORE — MULTIPLE SESSIONS
+// ================================================================
+const STORAGE_PREFIX='fpm_session_';
+const STORAGE_INDEX='fpm_sessions';
+
+function getSessionIndex() {
+  try{return JSON.parse(localStorage.getItem(STORAGE_INDEX)||'[]');}catch(e){return[];}
+}
+function saveSessionIndex(idx) {
+  localStorage.setItem(STORAGE_INDEX,JSON.stringify(idx));
+}
+
+btnSave.addEventListener('click',()=>{
+  saveName.value='';
+  saveDlg.classList.add('show');
+  setTimeout(()=>saveName.focus(),120);
+});
+
+saveOkBtn.addEventListener('click',()=>{
+  const name=saveName.value.trim()||('Session '+new Date().toLocaleString());
+  const sessionId='s_'+Date.now();
+  const data={
+    imgDataURL, scale, calRefId,
+    lines:mLines.map(m=>({id:m.id, x1:m.ep1.left, y1:m.ep1.top, x2:m.ep2.left, y2:m.ep2.top, label:m.label, isCal:m.isCal})),
+    zoom:fc.getZoom(), vpT:fc.viewportTransform.slice(),
+  };
+  try{
+    localStorage.setItem(STORAGE_PREFIX+sessionId, JSON.stringify(data));
+    const idx=getSessionIndex();
+    idx.unshift({id:sessionId, name, date:new Date().toISOString(), lineCount:mLines.length});
+    saveSessionIndex(idx);
+    saveDlg.classList.remove('show');
+    toast('Saved: '+name);
+  }catch(e){
+    toast('Save failed — image may be too large');
+  }
+});
+saveCancelBtn.addEventListener('click',()=>saveDlg.classList.remove('show'));
+
+function refreshSessionList() {
+  const idx=getSessionIndex();
+  if(idx.length===0){sessionList.style.display='none';return;}
+  sessionList.style.display='';
+  sessItems.innerHTML='';
+  idx.forEach((s,i)=>{
+    const el=document.createElement('div');
+    el.className='sess-item';
+    const d=new Date(s.date);
+    const dateStr=d.toLocaleDateString()+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    el.innerHTML=`
+      <div class="sess-info">
+        <div class="sess-name">${esc(s.name)}</div>
+        <div class="sess-meta">${s.lineCount||0} lines · ${dateStr}</div>
+      </div>
+    `;
+    const delBtn=document.createElement('button');
+    delBtn.className='sess-del';
+    delBtn.textContent='✕';
+    delBtn.addEventListener('click',ev=>{
+      ev.stopPropagation();
+      localStorage.removeItem(STORAGE_PREFIX+s.id);
+      const ni=getSessionIndex().filter(x=>x.id!==s.id);
+      saveSessionIndex(ni);
+      refreshSessionList();
+      toast('Session deleted');
+    });
+    el.appendChild(delBtn);
+    el.addEventListener('click',()=>restoreSession(s.id));
+    sessItems.appendChild(el);
+  });
+}
+
+function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+function restoreSession(sessionId) {
+  try{
+    const data=JSON.parse(localStorage.getItem(STORAGE_PREFIX+sessionId));
+    if(!data||!data.imgDataURL){toast('Session data missing');return;}
+    loadImage(data.imgDataURL, true);
+    const wait=setInterval(()=>{
+      if(!fc||!bgImage)return;
+      clearInterval(wait);
+      scale=data.scale||0; calRefId=data.calRefId||null;
+      if(data.zoom) fc.setZoom(data.zoom);
+      if(data.vpT) fc.viewportTransform=data.vpT;
+      (data.lines||[]).forEach(l=>{
+        const m=createMLine(l.x1,l.y1,l.x2,l.y2,l.label,l.isCal);
+        if(l.id) m.id=l.id;
+        if(l.isCal&&l.id===calRefId){
+          m.line.set({stroke:C_CAL});[m.ep1,m.ep2].forEach(ep=>ep.set({fill:C_CAL}));m.mid.set({stroke:C_CAL});
+        }
+      });
+      idCtr=mLines.reduce((mx,m)=>{const n=parseInt(m.id.replace('ml_',''));return n>mx?n:mx;},0);
+      refreshAll(); setMode('select');
+      toast('Session restored!');
+    },100);
+  }catch(e){toast('Restore failed');console.error(e);}
+}
+
+// ================================================================
+// ZOOM BUTTONS
+// ================================================================
+function zoomBy(f){
+  if(!fc)return;
+  let nz=fc.getZoom()*f; nz=Math.max(0.1,Math.min(10,nz));
+  fc.zoomToPoint(new fabric.Point(fc.getWidth()/2,fc.getHeight()/2),nz);
+  refreshAll();
+}
+btnZI.addEventListener('click',()=>zoomBy(1.3));
+btnZO.addEventListener('click',()=>zoomBy(1/1.3));
+
+// ================================================================
+// INIT
+// ================================================================
+refreshSessionList();
+
+})();
+</script>
+</body>
+</html>
